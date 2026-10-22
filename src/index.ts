@@ -3,14 +3,13 @@ import { syncWatchlist } from "./brief.ts";
 import { config, demoMode } from "./config.ts";
 import { openDb } from "./db.ts";
 import { startScheduler } from "./scheduler.ts";
-
-if (!config.telegramToken) {
-  console.error("TELEGRAM_BOT_TOKEN is missing. Copy .env.example to .env and fill it in.");
-  process.exit(1);
-}
+import { startWeb } from "./web.ts";
 
 const store = openDb(config.dbPath);
-const { bot, runBrief } = createBot(store);
+const telegram = config.telegramToken ? createBot(store) : null;
+if (!telegram) {
+  console.warn("TELEGRAM_BOT_TOKEN is missing, running the web interface only. See .env.example.");
+}
 
 const LATE_MS = 60 * 60_000;
 
@@ -27,34 +26,39 @@ const stopScheduler = startScheduler(store, config.timezone, [
     name: "brief",
     cron: config.briefCron,
     run: async (slot, now) => {
-      if (!config.telegramOwnerId) return;
+      if (!telegram || !config.telegramOwnerId) return;
       const late = now.getTime() - slot.getTime() > LATE_MS;
       const when = slot.toLocaleString("en-GB", {
         weekday: "long", hour: "numeric", minute: "2-digit", timeZone: config.timezone,
       });
-      await runBrief(config.telegramOwnerId, late ? `Catching up on the brief from ${when}.` : undefined);
+      await telegram.runBrief(config.telegramOwnerId, late ? `Catching up on the brief from ${when}.` : undefined);
     },
   },
 ]);
 
-await bot.api.setMyCommands([
-  { command: "brief", description: "Build this week's brief now" },
-  { command: "watch", description: "Add creators to the watchlist" },
-  { command: "unwatch", description: "Remove a creator" },
-  { command: "watchlist", description: "Show tracked creators" },
-  { command: "niche", description: "Set your niche" },
-  { command: "pillars", description: "Set your content pillars" },
-  { command: "inbox", description: "Ideas you've kept" },
-]);
+const web = startWeb(store, config.webPort);
 
 const shutdown = () => {
   stopScheduler();
-  void bot.stop();
+  web.close();
+  void telegram?.bot.stop();
 };
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
 
 console.log(
-  `Bot running${demoMode ? " in demo mode" : ""}. Brief: "${config.briefCron}" (${config.timezone}).`,
+  `${telegram ? "Bot" : "Web"} running${demoMode ? " in demo mode" : ""}. Brief: "${config.briefCron}" (${config.timezone}).`,
 );
-await bot.start();
+
+if (telegram) {
+  await telegram.bot.api.setMyCommands([
+    { command: "brief", description: "Build this week's brief now" },
+    { command: "watch", description: "Add creators to the watchlist" },
+    { command: "unwatch", description: "Remove a creator" },
+    { command: "watchlist", description: "Show tracked creators" },
+    { command: "niche", description: "Set your niche" },
+    { command: "pillars", description: "Set your content pillars" },
+    { command: "inbox", description: "Ideas you've kept" },
+  ]);
+  await telegram.bot.start();
+}

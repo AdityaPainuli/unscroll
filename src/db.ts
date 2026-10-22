@@ -203,6 +203,18 @@ export class Store {
       .get(briefId) as Idea | undefined;
   }
 
+  /** Idea of a brief that is on screen or waiting to be, oldest first. */
+  nextPending(briefId: number): Idea | undefined {
+    return this.db
+      .prepare(`SELECT * FROM ideas WHERE brief_id = ? AND status IN ('new', 'sent') ORDER BY id LIMIT 1`)
+      .get(briefId) as Idea | undefined;
+  }
+
+  latestBriefId(): number | null {
+    const row = this.db.prepare(`SELECT MAX(id) AS id FROM briefs`).get() as { id: number | null };
+    return row.id;
+  }
+
   briefProgress(briefId: number): { position: number; total: number } {
     const row = this.db
       .prepare(
