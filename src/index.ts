@@ -1,8 +1,8 @@
-import cron from "node-cron";
 import { createBot } from "./bot.ts";
 import { syncWatchlist } from "./brief.ts";
 import { config, demoMode } from "./config.ts";
 import { openDb } from "./db.ts";
+import { startScheduler } from "./scheduler.ts";
 
 if (!config.telegramToken) {
   console.error("TELEGRAM_BOT_TOKEN is missing. Copy .env.example to .env and fill it in.");
@@ -12,24 +12,30 @@ if (!config.telegramToken) {
 const store = openDb(config.dbPath);
 const { bot, runBrief } = createBot(store);
 
-cron.schedule(
-  config.syncCron,
-  () => {
-    syncWatchlist(store)
-      .then((r) => console.log(`sync: ${r.synced.length} ok, ${r.failed.length} failed`))
-      .catch((err) => console.error("sync failed:", err));
-  },
-  { timezone: config.timezone },
-);
+const LATE_MS = 60 * 60_000;
 
-cron.schedule(
-  config.briefCron,
-  () => {
-    if (!config.telegramOwnerId) return;
-    runBrief(config.telegramOwnerId).catch((err) => console.error("scheduled brief failed:", err));
+const stopScheduler = startScheduler(store, config.timezone, [
+  {
+    name: "sync",
+    cron: config.syncCron,
+    run: async () => {
+      const r = await syncWatchlist(store);
+      console.log(`sync: ${r.synced.length} ok, ${r.failed.length} failed`);
+    },
   },
-  { timezone: config.timezone },
-);
+  {
+    name: "brief",
+    cron: config.briefCron,
+    run: async (slot, now) => {
+      if (!config.telegramOwnerId) return;
+      const late = now.getTime() - slot.getTime() > LATE_MS;
+      const when = slot.toLocaleString("en-GB", {
+        weekday: "long", hour: "numeric", minute: "2-digit", timeZone: config.timezone,
+      });
+      await runBrief(config.telegramOwnerId, late ? `Catching up on the brief from ${when}.` : undefined);
+    },
+  },
+]);
 
 await bot.api.setMyCommands([
   { command: "brief", description: "Build this week's brief now" },
@@ -41,8 +47,12 @@ await bot.api.setMyCommands([
   { command: "inbox", description: "Ideas you've kept" },
 ]);
 
-process.once("SIGINT", () => bot.stop());
-process.once("SIGTERM", () => bot.stop());
+const shutdown = () => {
+  stopScheduler();
+  void bot.stop();
+};
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
 
 console.log(
   `Bot running${demoMode ? " in demo mode" : ""}. Brief: "${config.briefCron}" (${config.timezone}).`,

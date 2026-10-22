@@ -163,9 +163,11 @@ export function createBot(store: Store) {
     await ctx.reply("Saved to inbox.");
   });
 
-  async function runBrief(chatId: number) {
+  async function runBrief(chatId: number, intro?: string) {
+    if (briefRunning) return;
     briefRunning = true;
     try {
+      if (intro) await bot.api.sendMessage(chatId, intro);
       const result = await buildBrief(store);
       const problems = result.sync.failed.map((f) => `• ${f.reason}`);
       if (result.aiFailures) problems.push(`• AI breakdown failed for ${result.aiFailures} idea(s)`);

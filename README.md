@@ -18,6 +18,14 @@ To print a brief in the terminal without Telegram:
 npm run brief -- @creator1 @creator2
 ```
 
+### Keep it running on your Mac
+
+```bash
+scripts/agent.sh install
+```
+
+This runs Unscroll in the background, starts it on login, and restarts it if it crashes. `scripts/agent.sh status`, `logs` and `uninstall` do what they say.
+
 ## Setup
 
 ### 1. Telegram bot (2 min)
@@ -54,7 +62,7 @@ The app can stay in development mode since you're its only user, so no Meta app 
 | `/inbox` | Ideas you've kept |
 | any message | Saved to your inbox as an idea |
 
-The brief also runs on its own every Sunday at 9am (`BRIEF_CRON`), and the watchlist syncs nightly (`SYNC_CRON`).
+The brief also runs on its own every Sunday at 9am (`BRIEF_CRON`), and the watchlist syncs nightly (`SYNC_CRON`). If the laptop was asleep or off at that time, the brief goes out as soon as it's back on.
 
 ## How outliers are picked
 
