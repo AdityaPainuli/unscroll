@@ -56,6 +56,21 @@ describe("web interface", () => {
     expect(store.getIdea(id)?.status).toBe("added");
   });
 
+  it("finishes an older brief before a newer one", async () => {
+    const older = addBriefIdea("Older");
+    addBriefIdea("Newer");
+    const html = await (await fetch(`${base}/brief`)).text();
+    expect(html).toContain("Older");
+    expect(store.getIdea(older)?.status).toBe("sent");
+  });
+
+  it("shows the idea's angle in the inbox", async () => {
+    const id = addBriefIdea("Hook");
+    store.setIdeaStatus(id, "added");
+    const html = await (await fetch(`${base}/inbox`)).text();
+    expect(html).toContain("Yours");
+  });
+
   it("adds and removes creators", async () => {
     await post("/watchlist/add", { names: "@Some.Creator" });
     expect(store.listAccounts().map((a) => a.username)).toEqual(["some.creator"]);

@@ -129,7 +129,10 @@ export function createBot(store: Store) {
       const idea = store.getIdea(awaitingNoteFor);
       awaitingNoteFor = null;
       // The idea may have been handled from the web meanwhile.
-      if (idea?.status === "sent") {
+      if (idea && idea.status !== "sent") {
+        return ctx.reply("That idea was already handled on the web, so I didn't save this.");
+      }
+      if (idea) {
         store.setIdeaNote(idea.id, text);
         store.setIdeaStatus(idea.id, "added");
         await ctx.reply("Added with your angle.");

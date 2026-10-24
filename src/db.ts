@@ -203,11 +203,14 @@ export class Store {
       .get(briefId) as Idea | undefined;
   }
 
-  /** Idea of a brief that is on screen or waiting to be, oldest first. */
-  nextPending(briefId: number): Idea | undefined {
+  /** Oldest brief idea that is on screen or waiting to be, so an unfinished brief is never stranded by a newer one. */
+  nextPending(): Idea | undefined {
     return this.db
-      .prepare(`SELECT * FROM ideas WHERE brief_id = ? AND status IN ('new', 'sent') ORDER BY id LIMIT 1`)
-      .get(briefId) as Idea | undefined;
+      .prepare(
+        `SELECT * FROM ideas WHERE brief_id IS NOT NULL AND status IN ('new', 'sent')
+         ORDER BY brief_id, id LIMIT 1`,
+      )
+      .get() as Idea | undefined;
   }
 
   latestBriefId(): number | null {

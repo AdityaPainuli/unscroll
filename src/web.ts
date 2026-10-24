@@ -89,6 +89,8 @@ export function startWeb(store: Store, port: number, host = "127.0.0.1"): Server
   function checkOrigin(req: IncomingMessage) {
     const { port: actual } = server.address() as AddressInfo;
     const allowed = [`localhost:${actual}`, `127.0.0.1:${actual}`];
+    // Browsers leave the default port out of Host and Origin.
+    if (actual === 80) allowed.push("localhost", "127.0.0.1");
     if (!allowed.includes(req.headers.host ?? "")) throw new HttpError(403, "Forbidden host.");
     const origin = req.headers.origin;
     if (req.method !== "GET" && origin && !allowed.some((h) => origin === `http://${h}`)) {
@@ -146,9 +148,9 @@ export function startWeb(store: Store, port: number, host = "127.0.0.1"): Server
     const buildButton = (label: string) =>
       `<form method="post" action="/brief/build"><button>${label}</button></form>`;
 
-    const briefId = store.latestBriefId();
-    let idea = briefId ? store.nextPending(briefId) : undefined;
+    let idea = store.nextPending();
     if (!idea) {
+      const briefId = store.latestBriefId();
       const kept = briefId ? store.inbox(100).filter((i) => i.brief_id === briefId).length : 0;
       const done = briefId && !shown ? `<p>Brief done. You kept ${kept}.</p>` : "";
       return `${flashed}${shown}${done}${buildButton("Build a brief now")}`;
@@ -158,7 +160,7 @@ export function startWeb(store: Store, port: number, host = "127.0.0.1"): Server
       store.setIdeaStatus(idea.id, "sent");
       idea = { ...idea, status: "sent" };
     }
-    const { position, total } = store.briefProgress(briefId!);
+    const { position, total } = store.briefProgress(idea.brief_id!);
     return `${flashed}${shown}${ideaCard(idea, position, total)}`;
   }
 
@@ -172,6 +174,7 @@ export function startWeb(store: Store, port: number, host = "127.0.0.1"): Server
       return `<li>
         <p>${esc(title)}</p>
         ${i.username ? `<p class="meta">@${esc(i.username)}</p>` : ""}
+        ${i.angle ? `<p>${esc(i.angle)}</p>` : ""}
         ${i.note ? `<p class="angle">${esc(i.note)}</p>` : ""}
         ${link ? `<p><a href="${esc(link)}" rel="noreferrer">Open post</a></p>` : ""}
       </li>`;
