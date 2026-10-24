@@ -10,7 +10,17 @@ cp .env.example .env   # fill in the values below
 npm start
 ```
 
-Without Instagram credentials it runs on demo data, so you can try the bot first.
+Without Instagram credentials it runs on demo data, so you can try the bot first. Without a Telegram token it runs the web interface only.
+
+### Web interface
+
+`npm start` also serves a small web page at [http://localhost:4321](http://localhost:4321) (change the port with `WEB_PORT`). It's only reachable from your own machine.
+
+- **Brief**: build a brief whenever you want and go through it one idea at a time with Add, Skip or Add with my angle, like in Telegram.
+- **Inbox**: your latest kept ideas, with your angles and anything you saved from Telegram.
+- **Watchlist**: add and remove creators.
+
+Telegram and the web page share the same data, so an idea you handle in one shows as handled in the other. Only one brief is built at a time, wherever you start it from.
 
 To print a brief in the terminal without Telegram:
 

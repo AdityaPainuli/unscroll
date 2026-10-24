@@ -1,10 +1,8 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
-import { buildBrief } from "./brief.ts";
+import { buildBrief, isBriefRunning, watchAccount, withBriefLock } from "./brief.ts";
 import { config, demoMode } from "./config.ts";
 import type { Idea, Store } from "./db.ts";
-import { fetchAccount, normalizeUsername } from "./instagram.ts";
-
-const USERNAME = /^[a-z0-9._]{1,30}$/;
+import { normalizeUsername } from "./instagram.ts";
 
 const HELP = `<b>Unscroll</b>
 Your weekly ideas, without opening Instagram.
@@ -30,7 +28,6 @@ function args(ctx: Context): string {
 export function createBot(store: Store) {
   const bot = new Bot(config.telegramToken);
   let awaitingNoteFor: number | null = null;
-  let briefRunning = false;
 
   bot.command("whoami", (ctx) => ctx.reply(`Your Telegram user id is ${ctx.from?.id}.`));
 
@@ -64,24 +61,10 @@ export function createBot(store: Store) {
   });
 
   bot.command("watch", async (ctx) => {
-    const names = args(ctx).split(/[\s,]+/).filter(Boolean).map(normalizeUsername);
+    const names = args(ctx).split(/[\s,]+/).filter(Boolean);
     if (names.length === 0) return ctx.reply("Usage: /watch @creator1 @creator2");
     const lines: string[] = [];
-    for (const name of names) {
-      if (!USERNAME.test(name)) {
-        lines.push(`@${name}: not a valid username`);
-        continue;
-      }
-      try {
-        const snapshot = await fetchAccount(name);
-        store.addAccount(snapshot.username, snapshot.followers);
-        store.upsertPosts(snapshot.posts);
-        store.markSynced(snapshot.username, snapshot.followers);
-        lines.push(`@${snapshot.username}: added (${snapshot.posts.length} posts)`);
-      } catch (err) {
-        lines.push(`@${name}: ${(err as Error).message}. Only creator and business accounts work.`);
-      }
-    }
+    for (const name of names) lines.push(await watchAccount(store, name));
     await ctx.reply(lines.join("\n"));
   });
 
@@ -111,7 +94,7 @@ export function createBot(store: Store) {
   });
 
   bot.command("brief", async (ctx) => {
-    if (briefRunning) return ctx.reply("A brief is already being built.");
+    if (isBriefRunning()) return ctx.reply("A brief is already being built.");
     await ctx.reply("Building your brief. This takes a minute.");
     // Not awaited: grammY handles updates one at a time, and buttons must stay responsive.
     void runBrief(ctx.chat.id).catch((err) => {
@@ -145,6 +128,10 @@ export function createBot(store: Store) {
     if (awaitingNoteFor !== null) {
       const idea = store.getIdea(awaitingNoteFor);
       awaitingNoteFor = null;
+      // The idea may have been handled from the web meanwhile.
+      if (idea && idea.status !== "sent") {
+        return ctx.reply("That idea was already handled on the web, so I didn't save this.");
+      }
       if (idea) {
         store.setIdeaNote(idea.id, text);
         store.setIdeaStatus(idea.id, "added");
@@ -164,9 +151,7 @@ export function createBot(store: Store) {
   });
 
   async function runBrief(chatId: number, intro?: string) {
-    if (briefRunning) return;
-    briefRunning = true;
-    try {
+    await withBriefLock(async () => {
       if (intro) await bot.api.sendMessage(chatId, intro);
       const result = await buildBrief(store);
       const problems = result.sync.failed.map((f) => `• ${f.reason}`);
@@ -182,9 +167,7 @@ export function createBot(store: Store) {
       }
       await bot.api.sendMessage(chatId, `This week: ${result.ideaCount} ideas. One at a time.`);
       await sendNext(chatId, result.briefId);
-    } finally {
-      briefRunning = false;
-    }
+    });
   }
 
   async function sendNext(chatId: number, briefId: number) {
