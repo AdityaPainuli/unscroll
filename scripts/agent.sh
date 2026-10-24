@@ -37,6 +37,12 @@ case "${1:-}" in
 </plist>
 PLIST
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    # bootout returns before the old process is gone, and bootstrapping too early
+    # fails with "Bootstrap failed: 5: Input/output error". Wait up to 10s.
+    for _ in {1..20}; do
+      launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || break
+      sleep 0.5
+    done
     launchctl bootstrap "gui/$(id -u)" "$PLIST"
     echo "Installed. Unscroll now runs in the background and starts on login."
     echo "Logs: $LOG"

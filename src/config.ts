@@ -1,3 +1,7 @@
+// An empty `TZ=` (e.g. from .env) makes Node fall back to UTC and report the zone as
+// "Etc/Unknown". Unset it so the machine's timezone is used.
+if (process.env.TZ?.trim() === "") delete process.env.TZ;
+
 function num(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
