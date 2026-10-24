@@ -1,8 +1,44 @@
 import { analyzeOutlier, fallbackBreakdown } from "./analyze.ts";
 import { config } from "./config.ts";
 import type { Store } from "./db.ts";
-import { fetchAccount } from "./instagram.ts";
+import { fetchAccount, normalizeUsername } from "./instagram.ts";
 import { findOutliers } from "./outliers.ts";
+
+const USERNAME = /^[a-z0-9._]{1,30}$/;
+
+/** Adds one creator to the watchlist and pulls their posts. Returns a one-line status. */
+export async function watchAccount(store: Store, input: string): Promise<string> {
+  const name = normalizeUsername(input);
+  if (!USERNAME.test(name)) return `@${name}: not a valid username`;
+  try {
+    const snapshot = await fetchAccount(name);
+    store.addAccount(snapshot.username, snapshot.followers);
+    store.upsertPosts(snapshot.posts);
+    store.markSynced(snapshot.username, snapshot.followers);
+    return `@${snapshot.username}: added (${snapshot.posts.length} posts)`;
+  } catch (err) {
+    return `@${name}: ${(err as Error).message}. Only creator and business accounts work.`;
+  }
+}
+
+let briefRunning = false;
+
+/** True while a brief is being built from Telegram or the web. */
+export function isBriefRunning(): boolean {
+  return briefRunning;
+}
+
+/** Runs `fn` unless a brief is already being built. Resolves false if it was skipped. */
+export async function withBriefLock(fn: () => Promise<void>): Promise<boolean> {
+  if (briefRunning) return false;
+  briefRunning = true;
+  try {
+    await fn();
+    return true;
+  } finally {
+    briefRunning = false;
+  }
+}
 
 export interface SyncResult {
   synced: string[];

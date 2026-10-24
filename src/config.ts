@@ -27,6 +27,7 @@ export const config = {
   outlierWindowDays: num("OUTLIER_WINDOW_DAYS", 14),
 
   dbPath: str("DB_PATH", "data/studio.db"),
+  webPort: num("WEB_PORT", 4321),
 };
 
 export const demoMode = !config.igUserId || !config.igAccessToken;
